@@ -1,133 +1,186 @@
 import cv2
 import mediapipe as mp
+import math
+import pyautogui
+import time
+import pygetwindow as gw
 from pathlib import Path
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, RunningMode
-import math
 
+# -----------------------------
+# POWERPOINT CONTROL
+# -----------------------------
+def activate_powerpoint():
+    windows = gw.getWindowsWithTitle("PowerPoint")
+    if windows:
+        windows[0].activate()
+
+    time.sleep(1)
+
+    pyautogui.press("f5")      # slideshow
+    time.sleep(1)
+
+    pyautogui.hotkey("ctrl", "p")  # pen tool
+    time.sleep(0.5)
+
+
+# -----------------------------
+# ONE EURO FILTER (better tuned)
+# -----------------------------
 class OneEuroPoint:
-    def __init__(self, alpha=0.2):
-        self.alpha = alpha
+    def __init__(self, min_cutoff=2.0, beta=0.02):
+        self.min_cutoff = min_cutoff
+        self.beta = beta
         self.x = None
         self.y = None
+        self.prev_time = None
+        self.dx = 0
+        self.dy = 0
 
     def update(self, x, y):
         if self.x is None:
             self.x, self.y = x, y
             return x, y
 
-        self.x = self.alpha * x + (1 - self.alpha) * self.x
-        self.y = self.alpha * y + (1 - self.alpha) * self.y
+        # velocity
+        self.dx = x - self.x
+        self.dy = y - self.y
+
+        cutoff = self.min_cutoff + self.beta * (abs(self.dx) + abs(self.dy))
+
+        a = 1.0 / (1.0 + cutoff)
+
+        self.x = a * x + (1 - a) * self.x
+        self.y = a * y + (1 - a) * self.y
+
         return int(self.x), int(self.y)
-    
-# globals 
-canvas = None
-prev_point = None
+
+
+# -----------------------------
+# GLOBAL STATE
+# -----------------------------
+smooth_tip = OneEuroPoint()
 pinch_buffer = []
-smooth_tip = OneEuroPoint(alpha=0.25)
 
-drawing_active = False
-locked_scale = None
+mouse_down = False
 prev_point = None
 
-scale_thresh = 0.15
-scale_fail_count = 0
-# ---------------------------------------------------------------------------
-# Model path
-# ---------------------------------------------------------------------------
+screen_w, screen_h = pyautogui.size()
+
+frame_counter = 0
+FRAME_SKIP = 2
+
+DEADZONE = 5
+
+pyautogui.FAILSAFE = True
+pyautogui.PAUSE = 0
+
+
+# -----------------------------
+# MODEL
+# -----------------------------
 model_path = str((Path(__file__).parent / "hand_landmarker.task").resolve())
 
-# ---------------------------------------------------------------------------
-# Skeleton connections
-# ---------------------------------------------------------------------------
-CONNECTIONS = [
-    (0,1),(1,2),(2,3),(3,4),
-    (0,5),(5,6),(6,7),(7,8),
-    (5,9),(9,10),(10,11),(11,12),
-    (9,13),(13,14),(14,15),(15,16),
-    (13,17),(0,17),(17,18),(18,19),(19,20),
-]
 
-latest_frame = None
-
-
-def getScale(hand):
-    #0-5, 5-6, 6-7, 7-8
-    dist = 0
-    dist += distance(hand[0],hand[5])
-    dist += distance(hand[5],hand[6])
-    dist += distance(hand[6],hand[7])
-    dist += distance(hand[7],hand[8])
-    return dist
-
+# -----------------------------
+# HELPERS
+# -----------------------------
 def distance(a, b):
     return math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
 
-def is_penPinch(hand, fingerThreshHold = 0.15, thumbThreshHold = 0.30):
+
+def getScale(hand):
+    return (
+        distance(hand[0], hand[5]) +
+        distance(hand[5], hand[6]) +
+        distance(hand[6], hand[7]) +
+        distance(hand[7], hand[8])
+    )
+
+
+def is_pinch(hand):
     scale = getScale(hand)
-    indexDistance = distance(hand[12],hand[8])
-    thumbDistance = distance(hand[4], hand[16])
-    return ((indexDistance / scale) < fingerThreshHold) and ((thumbDistance / scale) < thumbThreshHold)
-    
-# ---------------------------------------------------------------------------
-# Callback
-# ---------------------------------------------------------------------------
+
+    index_dist = distance(hand[8], hand[12])
+    thumb_dist = distance(hand[4], hand[16])
+
+    return (index_dist / scale < 0.15) and (thumb_dist / scale < 0.3)
+
+
+# -----------------------------
+# CALLBACK
+# -----------------------------
 def callback(result, mp_image, timestamp_ms):
-    global latest_frame, canvas, prev_point
+    global mouse_down, prev_point, frame_counter
+
+    frame_counter += 1
+    if frame_counter % FRAME_SKIP != 0:
+        return
 
     frame = mp_image.numpy_view().copy()
     h, w, _ = frame.shape
 
-    if canvas is None:
-        canvas = frame.copy()
-        canvas[:] = (0, 0, 0)
+    if not result.hand_landmarks:
+        return
 
-    if result.hand_landmarks and len(result.hand_landmarks) > 0:
-        hand = result.hand_landmarks[0]
+    hand = result.hand_landmarks[0]
 
-        # smoothed pen tip
-        raw_x = hand[8].x * w
-        raw_y = hand[8].y * h
-        x, y = smooth_tip.update(raw_x, raw_y)
-        current_point = (x, y)
+    # -------------------------
+    # PINCH STABILITY BUFFER
+    # -------------------------
+    pinch_buffer.append(is_pinch(hand))
+    if len(pinch_buffer) > 9:
+        pinch_buffer.pop(0)
 
-        # -------------------------
-        # PINCH = DRAW
-        # -------------------------
-        pinch = is_penPinch(hand)
+    pinch = sum(pinch_buffer) >= 7
 
-        if pinch:
-            if prev_point is not None:
-                dx = current_point[0] - prev_point[0]
-                dy = current_point[1] - prev_point[1]
-                dist = int(math.hypot(dx, dy))
+    # -------------------------
+    # LANDMARK → SCREEN SPACE
+    # -------------------------
+    raw_x = hand[8].x * w
+    raw_y = hand[8].y * h
 
-                for i in range(dist):
-                    t = i / dist if dist != 0 else 0
-                    x = int(prev_point[0] + dx * t)
-                    y = int(prev_point[1] + dy * t)
-                    cv2.circle(canvas, (x, y), 2, (0, 0, 255), -1)
+    screen_x = int((raw_x / w) * screen_w)
+    screen_y = int((raw_y / h) * screen_h)
 
-            prev_point = current_point
+    # -------------------------
+    # SMOOTH IN SCREEN SPACE
+    # -------------------------
+    screen_x, screen_y = smooth_tip.update(screen_x, screen_y)
 
-        else:
-            # pen lifted
-            prev_point = None
+    # -------------------------
+    # DEADZONE (kills jitter)
+    # -------------------------
+    if prev_point is not None:
+        if abs(screen_x - prev_point[0]) < DEADZONE and abs(screen_y - prev_point[1]) < DEADZONE:
+            screen_x, screen_y = prev_point
 
-        # skeleton overlay
-        for a, b in CONNECTIONS:
-            ax, ay = int(hand[a].x * w), int(hand[a].y * h)
-            bx, by = int(hand[b].x * w), int(hand[b].y * h)
-            cv2.line(frame, (ax, ay), (bx, by), (200, 200, 200), 1)
+    # -------------------------
+    # DRAW CONTROL (FIXED)
+    # -------------------------
+    if pinch:
+        # ALWAYS move cursor while pinching
+        pyautogui.moveTo(screen_x, screen_y)
 
+        # ONLY press once (start stroke)
+        if not mouse_down:
+            pyautogui.mouseDown(button="left")
+            mouse_down = True
+            
+        pyautogui.dragTo(screen_x, screen_y, duration=0)
     else:
-        prev_point = None  # lost tracking → stop drawing
+        # ONLY release once (end stroke)
+        if mouse_down:
+            pyautogui.mouseUp(button="left")
+            mouse_down = False
 
-    latest_frame = cv2.addWeighted(frame, 0.7, canvas, 0.3, 0)
+    prev_point = (screen_x, screen_y)
 
-# ---------------------------------------------------------------------------
-# MediaPipe setup (NEW API)
-# ---------------------------------------------------------------------------
+
+# -----------------------------
+# MEDIA PIPE SETUP
+# -----------------------------
 options = HandLandmarkerOptions(
     base_options=python.BaseOptions(model_asset_path=model_path),
     running_mode=RunningMode.LIVE_STREAM,
@@ -137,9 +190,12 @@ options = HandLandmarkerOptions(
 
 landmarker = HandLandmarker.create_from_options(options)
 
-# ---------------------------------------------------------------------------
-# Webcam loop
-# ---------------------------------------------------------------------------
+activate_powerpoint()
+
+
+# -----------------------------
+# CAMERA LOOP
+# -----------------------------
 cap = cv2.VideoCapture(0)
 ts_freq = cv2.getTickFrequency()
 
@@ -158,8 +214,7 @@ while cap.isOpened():
     timestamp = int(cv2.getTickCount() / ts_freq * 1000)
     landmarker.detect_async(mp_image, timestamp)
 
-    display = latest_frame if latest_frame is not None else frame
-    cv2.imshow("Hand Skeleton", display)
+    cv2.imshow("Hand Tracking", frame)
 
     if cv2.waitKey(1) & 0xFF == 27:
         break
