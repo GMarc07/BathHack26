@@ -48,6 +48,7 @@ hit_point          = None
 debug_str          = ""
 
 calib_mode   = False
+laserMode = False
 calib_corner = 0
 calib_hits   = {}
 CORNER_NAMES = ["TOP-LEFT", "TOP-RIGHT", "BOTTOM-LEFT", "BOTTOM-RIGHT"]
@@ -90,106 +91,107 @@ def finger_ray_screen_hit(base_lm, tip_lm, z_scale):
 # Callback
 # ---------------------------------------------------------------------------
 def callback(result, mp_image, timestamp_ms):
-    global latest_frame, calibMidFingerDist, hit_point, debug_str
+    global latest_frame, calibMidFingerDist, hit_point, debug_str, laserMode
 
-    frame = mp_image.numpy_view().copy()
-    h, w, _ = frame.shape
+    if laserMode:
+        frame = mp_image.numpy_view().copy()
+        h, w, _ = frame.shape
 
-    if result.hand_landmarks:
-        hand = result.hand_landmarks[0]
+        if result.hand_landmarks:
+            hand = result.hand_landmarks[0]
 
-        # --- Depth calibration ---
-        MIDDLE_SEGMENTS = [(12,11),(11,10),(10,9),(9,0)]
+            # --- Depth calibration ---
+            MIDDLE_SEGMENTS = [(12,11),(11,10),(10,9),(9,0)]
 
-        def finger_len():
-            total = 0.0
-            for a, b in MIDDLE_SEGMENTS:
-                dx = hand[a].x - hand[b].x
-                dy = hand[a].y - hand[b].y
-                total += (dx*dx + dy*dy) ** 0.5
-            return total
+            def finger_len():
+                total = 0.0
+                for a, b in MIDDLE_SEGMENTS:
+                    dx = hand[a].x - hand[b].x
+                    dy = hand[a].y - hand[b].y
+                    total += (dx*dx + dy*dy) ** 0.5
+                return total
 
-        midFingerDist = finger_len()
-        if calibMidFingerDist == 0.0:
-            calibMidFingerDist = midFingerDist
-        depth_ratio = midFingerDist / calibMidFingerDist if calibMidFingerDist else 1.0
+            midFingerDist = finger_len()
+            if calibMidFingerDist == 0.0:
+                calibMidFingerDist = midFingerDist
+            depth_ratio = midFingerDist / calibMidFingerDist if calibMidFingerDist else 1.0
 
-        # --- Ray-screen intersection ---
-        hit = finger_ray_screen_hit(hand[7], hand[8], Z_SCALE)
+            # --- Ray-screen intersection ---
+            hit = finger_ray_screen_hit(hand[7], hand[8], Z_SCALE)
 
-        # Smooth the hit point to reduce jitter
-        global _smooth_hx, _smooth_hy
-        if hit:
-            _smooth_hx = SMOOTH * _smooth_hx + (1 - SMOOTH) * hit[0]
-            _smooth_hy = SMOOTH * _smooth_hy + (1 - SMOOTH) * hit[1]
-            hit = (_smooth_hx, _smooth_hy)
+            # Smooth the hit point to reduce jitter
+            global _smooth_hx, _smooth_hy
+            if hit:
+                _smooth_hx = SMOOTH * _smooth_hx + (1 - SMOOTH) * hit[0]
+                _smooth_hy = SMOOTH * _smooth_hy + (1 - SMOOTH) * hit[1]
+                hit = (_smooth_hx, _smooth_hy)
 
-        hit_point = hit
+            hit_point = hit
 
-        # --- Move mouse ---
-        if hit:
-            mx, my = hit_to_screen(hit[0], hit[1])
-            win32api.SetCursorPos((mx, my))
+            # --- Move mouse ---
+            if hit:
+                mx, my = hit_to_screen(hit[0], hit[1])
+                win32api.SetCursorPos((mx, my))
 
-        # --- Debug ---
-        base_lm = hand[5]
-        tip_lm  = hand[8]
-        debug_str = f"base.z={base_lm.z:.4f}  tip.z={tip_lm.z:.4f}  dz={tip_lm.z - base_lm.z:.4f}"
+            # --- Debug ---
+            base_lm = hand[5]
+            tip_lm  = hand[8]
+            debug_str = f"base.z={base_lm.z:.4f}  tip.z={tip_lm.z:.4f}  dz={tip_lm.z - base_lm.z:.4f}"
 
-        # --- Draw skeleton ---
-        for a, b in CONNECTIONS:
-            ax, ay = int(hand[a].x * w), int(hand[a].y * h)
-            bx, by = int(hand[b].x * w), int(hand[b].y * h)
-            cv2.line(frame, (ax, ay), (bx, by), (200, 200, 200), 1)
+            # --- Draw skeleton ---
+            for a, b in CONNECTIONS:
+                ax, ay = int(hand[a].x * w), int(hand[a].y * h)
+                bx, by = int(hand[b].x * w), int(hand[b].y * h)
+                cv2.line(frame, (ax, ay), (bx, by), (200, 200, 200), 1)
 
-        # --- Draw landmarks ---
-        for i, lm in enumerate(hand):
-            cx, cy = int(lm.x * w), int(lm.y * h)
-            cv2.circle(frame, (cx, cy), 4, (255, 255, 255), -1)
-            cv2.putText(frame, str(i), (cx + 4, cy),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+            # --- Draw landmarks ---
+            for i, lm in enumerate(hand):
+                cx, cy = int(lm.x * w), int(lm.y * h)
+                cv2.circle(frame, (cx, cy), 4, (255, 255, 255), -1)
+                cv2.putText(frame, str(i), (cx + 4, cy),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
 
-        # --- Draw ray line ---
-        base = hand[7]
-        tip  = hand[8]
-        ext  = 3.0
-        ray_ex = int((base.x + ext * (tip.x - base.x)) * w)
-        ray_ey = int((base.y + ext * (tip.y - base.y)) * h)
-        cv2.line(frame,
-                 (int(base.x * w), int(base.y * h)),
-                 (ray_ex, ray_ey),
-                 (0, 180, 255), 1)
+            # --- Draw ray line ---
+            base = hand[7]
+            tip  = hand[8]
+            ext  = 3.0
+            ray_ex = int((base.x + ext * (tip.x - base.x)) * w)
+            ray_ey = int((base.y + ext * (tip.y - base.y)) * h)
+            cv2.line(frame,
+                    (int(base.x * w), int(base.y * h)),
+                    (ray_ex, ray_ey),
+                    (0, 180, 255), 1)
 
-        # --- Draw hit point ---
-        if hit:
-            hx = max(0, min(w-1, int(hit[0] * w)))
-            hy = max(0, min(h-1, int(hit[1] * h)))
-            cv2.drawMarker(frame, (hx, hy), (0, 255, 0), cv2.MARKER_CROSS, 20, 2)
+            # --- Draw hit point ---
+            if hit:
+                hx = max(0, min(w-1, int(hit[0] * w)))
+                hy = max(0, min(h-1, int(hit[1] * h)))
+                cv2.drawMarker(frame, (hx, hy), (0, 255, 0), cv2.MARKER_CROSS, 20, 2)
 
-        # --- HUD ---
-        cv2.rectangle(frame, (0, 0), (w, 80), (0, 0, 0), -1)
-        cv2.putText(frame,
-                    f"calib={calibMidFingerDist:.4f}  curr={midFingerDist:.4f}  depth_ratio={depth_ratio:.2f}",
-                    (8, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
-        if hit:
-            sx, sy = hit_to_screen(hit[0], hit[1])
-            hit_str = f"hit=({hit[0]:.3f},{hit[1]:.3f})  screen=({sx},{sy})"
-        else:
-            hit_str = "hit=None (finger parallel to screen)"
-        cv2.putText(frame,
-                    f"Z_SCALE={Z_SCALE:.1f} (+/-)   {hit_str}",
-                    (8, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1)
-
-        if calib_mode:
-            corner_name = CORNER_NAMES[calib_corner] if calib_corner < 4 else "DONE"
+            # --- HUD ---
+            cv2.rectangle(frame, (0, 0), (w, 80), (0, 0, 0), -1)
             cv2.putText(frame,
-                        f"CALIB: point at {corner_name}, press C to record",
-                        (8, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+                        f"calib={calibMidFingerDist:.4f}  curr={midFingerDist:.4f}  depth_ratio={depth_ratio:.2f}",
+                        (8, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
+            if hit:
+                sx, sy = hit_to_screen(hit[0], hit[1])
+                hit_str = f"hit=({hit[0]:.3f},{hit[1]:.3f})  screen=({sx},{sy})"
+            else:
+                hit_str = "hit=None (finger parallel to screen)"
+            cv2.putText(frame,
+                        f"Z_SCALE={Z_SCALE:.1f} (+/-)   {hit_str}",
+                        (8, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1)
 
-    else:
-        hit_point = None
+            if calib_mode:
+                corner_name = CORNER_NAMES[calib_corner] if calib_corner < 4 else "DONE"
+                cv2.putText(frame,
+                            f"CALIB: point at {corner_name}, press C to record",
+                            (8, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
 
-    latest_frame = frame
+        else:
+            hit_point = None
+
+        latest_frame = frame
 
 # ---------------------------------------------------------------------------
 # MediaPipe setup
