@@ -31,6 +31,7 @@ CONNECTIONS = [
 # ---------------------------------------------------------------------------
 CAM_W, CAM_H = 640, 480
 Z_SCALE = 3.0
+Y_SHIFT = 0.3   # shift the whole view down (increase if screen still too high)
 
 # Hit remapping — use corner calibration (press c) to set these automatically
 HIT_X_MIN = 0.2
@@ -71,17 +72,17 @@ _smooth_hy = 0.5
 
 def finger_ray_screen_hit(base_lm, tip_lm, z_scale):
     dx = tip_lm.x - base_lm.x
-    dy = tip_lm.y - base_lm.y
-    dz = tip_lm.z - base_lm.z   # negative = pointing toward screen
+    dy = (tip_lm.y + Y_SHIFT) - (base_lm.y + Y_SHIFT)   # shift cancels in direction
+    dz = tip_lm.z - base_lm.z
 
-    if dz > -0.01:       # not tilted toward screen enough — skip
+    if dz > -0.01:
         return None
 
     t = -z_scale / dz
-    t = min(t, 2.0)      # cap to prevent explosion when dz is tiny
+    t = min(t, 2.0)
 
     hit_x = base_lm.x + t * dx
-    hit_y = base_lm.y + t * dy
+    hit_y = (base_lm.y + Y_SHIFT) + t * dy   # shift the origin down
 
     return hit_x, hit_y
 
