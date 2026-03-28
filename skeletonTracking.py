@@ -115,7 +115,7 @@ def callback(result, mp_image, timestamp_ms):
         depth_ratio = midFingerDist / calibMidFingerDist if calibMidFingerDist else 1.0
 
         # --- Ray-screen intersection ---
-        hit = finger_ray_screen_hit(hand[5], hand[8], Z_SCALE)
+        hit = finger_ray_screen_hit(hand[7], hand[8], Z_SCALE)
 
         # Smooth the hit point to reduce jitter
         global _smooth_hx, _smooth_hy
@@ -150,7 +150,7 @@ def callback(result, mp_image, timestamp_ms):
                         cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
 
         # --- Draw ray line ---
-        base = hand[5]
+        base = hand[7]
         tip  = hand[8]
         ext  = 3.0
         ray_ex = int((base.x + ext * (tip.x - base.x)) * w)
