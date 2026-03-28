@@ -62,7 +62,7 @@ def calibrate(hand):
         "y": hand[0].y,
         "scale": getScale(hand)
     }
-    print("Calibrated "+ str(anchor["x"]) + " " + str(anchor["y"]))
+    # print("Calibrated "+ str(anchor["x"]) + " " + str(anchor["y"]))
 
 
 def get_cursor_pos(hand, anchor, screen_w, screen_h, sensitivity=1.6):
@@ -182,6 +182,7 @@ def callback(result, mp_image, timestamp_ms):
             middle_pinch_time = 0
         
         draw_anchor_rect(frame,anchor)
+        get_cursor_pos(hand,anchor,1920,1080)
 
         # Draw skeleton
         for a, b in CONNECTIONS:
