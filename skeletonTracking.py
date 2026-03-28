@@ -230,9 +230,6 @@ while cap.isOpened():
     display = latest_frame if latest_frame is not None else frame
     cv2.imshow("Hand Skeleton", display)
 
-    if debug_str:
-        print(debug_str)
-
     key = cv2.waitKey(1) & 0xFF
     if key == 27:
         break
