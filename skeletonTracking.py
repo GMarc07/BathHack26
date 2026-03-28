@@ -28,6 +28,8 @@ anchor = None
 holding_index_pinch = False
 holding_middle_pinch = False
 last_pinch = 0
+index_pinch_time = 0
+middle_pinch_time = 0
 COOLDOWN = 0.2  # seconds
 
 def getScale(hand):
@@ -119,6 +121,8 @@ def callback(result, mp_image, timestamp_ms):
     global latest_frame
     global holding_index_pinch
     global holding_middle_pinch
+    global index_pinch_time
+    global middle_pinch_time
 
     frame = mp_image.numpy_view().copy()
     h, w, _ = frame.shape
@@ -132,17 +136,26 @@ def callback(result, mp_image, timestamp_ms):
         else:
             do_slides = True
 
-        # -------- INDEX PINCH --------
+        # -------- INDEX PINCH --------#
         if is_Index_Pinch(hand) and do_slides:
-            next_slide()
+            if index_pinch_time >= 5:
+                next_slide()
+            else:
+                index_pinch_time += 1
         else:
             holding_index_pinch = False
+            index_pinch_time = 0
+
 
         # -------- MIDDLE PINCH --------
         if is_Middle_Pinch(hand) and do_slides:
-            prev_slide()
+            if middle_pinch_time >= 5:
+                prev_slide()
+            else:
+                middle_pinch_time += 1
         else:
             holding_middle_pinch = False
+            middle_pinch_time = 0
         
         draw_anchor_rect(frame,anchor)
 
