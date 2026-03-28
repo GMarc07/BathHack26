@@ -50,6 +50,39 @@ def is_Index_Pinch(hand, threshHold = 0.15):
     return (d1 / scale) < threshHold
 
 def is_Middle_Pinch(hand, threshHold = 0.15):
+  
+def calibrate(hand):
+    global anchor
+    anchor = {
+        "x": hand[0].x,       # wrist position as centre of reference
+        "y": hand[0].y,
+        "scale": getScale(hand)
+    }
+    print("Calibrated "+ str(anchor["x"]) + " " + str(anchor["y"]))
+
+
+
+def draw_anchor_rect(frame, anchor):
+    if anchor is None:
+        return
+
+    h, w = frame.shape[:2]
+    
+    half = anchor["scale"] * 1.6  # how far in normalised coords to reach screen edge
+    
+    # convert normalised coords to pixels
+    x1 = int((anchor["x"] - half) * w)
+    y1 = int((anchor["y"] - half) * h)
+    x2 = int((anchor["x"] + half) * w)
+    y2 = int((anchor["y"] + half) * h)
+    
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 255), 2)
+    
+    # optional: draw the anchor centre point too
+    cx = int(anchor["x"] * w)
+    cy = int(anchor["y"] * h)
+    cv2.circle(frame, (cx, cy), 5, (255, 255, 255), -1)
+def is_Pinch(hand, threshHold = 0.15):
     scale = getScale(hand)
     d1 = distance(hand[4],hand[12])
     d2 = distance(hand[4],hand[8])
@@ -93,6 +126,11 @@ def callback(result, mp_image, timestamp_ms):
             holding_middle_pinch = True
         else:
             holding_middle_pinch = False
+        print(is_Pinch(hand))
+        if is_Pinch(hand):
+            calibrate(hand)
+        
+        draw_anchor_rect(frame,anchor)
 
         # Draw skeleton
         for a, b in CONNECTIONS:
