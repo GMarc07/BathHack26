@@ -4,6 +4,7 @@ from pathlib import Path
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, RunningMode
 import math
+import win32api
 
 # ---------------------------------------------------------------------------
 # Model path
@@ -46,20 +47,27 @@ def calibrate(hand):
     print("Calibrated "+ str(anchor["x"]) + " " + str(anchor["y"]))
 
 
-def Calculate_Cursor_Pos(hand):
-    screen_w = 1080
-    screen_h = 920  #TEMPORARY 
+def get_cursor_pos(hand, anchor, screen_w, screen_h, sensitivity=1.6):
     if anchor is None:
         return None
-    
-    dx = (hand[0].x - anchor["x"]) / anchor["scale"]
-    dy = (hand[0].y - anchor["y"]) / anchor["scale"]
-    
-    cursor_x = screen_w / 2 + dx * screen_w
-    cursor_y = screen_h / 2 + dy * screen_h
-    
-    return cursor_x, cursor_y
 
+    half = anchor["scale"] * sensitivity
+
+    palm_x = hand[0].x
+    palm_y = hand[0].y
+
+    # normalise palm position within the rectangle (0.0 to 1.0)
+    norm_x = (palm_x - (anchor["x"] - half)) / (2 * half)
+    norm_y = (palm_y - (anchor["y"] - half)) / (2 * half)
+
+    # clamp so it doesn't go off screen
+    norm_x = max(0.0, min(1.0, norm_x))
+    norm_y = max(0.0, min(1.0, norm_y))
+
+    cursor_x = int(norm_x * screen_w)
+    cursor_y = int(norm_y * screen_h)
+
+    win32api.SetCursorPos((cursor_x, cursor_y))
 
 def draw_anchor_rect(frame, anchor):
     if anchor is None:
@@ -82,7 +90,7 @@ def draw_anchor_rect(frame, anchor):
     cy = int(anchor["y"] * h)
     cv2.circle(frame, (cx, cy), 5, (255, 255, 255), -1)
 
-    
+
 def is_Pinch(hand, threshHold = 0.15):
     scale = getScale(hand)
     d = distance(hand[4],hand[8])
@@ -103,6 +111,7 @@ def callback(result, mp_image, timestamp_ms):
             calibrate(hand)
         
         draw_anchor_rect(frame,anchor)
+        get_cursor_pos(hand,anchor,1920,1080)
 
         # Draw skeleton
         for a, b in CONNECTIONS:
@@ -136,7 +145,7 @@ landmarker = HandLandmarker.create_from_options(options)
 # ---------------------------------------------------------------------------
 # Webcam loop
 # ---------------------------------------------------------------------------
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 ts_freq = cv2.getTickFrequency()
 
 while cap.isOpened():
