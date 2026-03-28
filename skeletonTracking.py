@@ -138,7 +138,7 @@ def callback(result, mp_image, timestamp_ms):
 
         # -------- INDEX PINCH --------#
         if is_Index_Pinch(hand) and do_slides:
-            if index_pinch_time >= 5:
+            if index_pinch_time >= 2:
                 next_slide()
             else:
                 index_pinch_time += 1
@@ -149,7 +149,7 @@ def callback(result, mp_image, timestamp_ms):
 
         # -------- MIDDLE PINCH --------
         if is_Middle_Pinch(hand) and do_slides:
-            if middle_pinch_time >= 5:
+            if middle_pinch_time >= 2:
                 prev_slide()
             else:
                 middle_pinch_time += 1
