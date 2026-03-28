@@ -236,10 +236,17 @@ def prev_slide():
 # ---------------------------------------------------------------------------
 def callback(result, mp_image, timestamp_ms):
     global latest_frame, calibMidFingerDist, hit_point, debug_str, laserMode
+    global holding_index_pinch
+    global holding_middle_pinch
+    global index_pinch_time
+    global middle_pinch_time
+    global canvas
+    global prev_point
 
+
+    frame = mp_image.numpy_view().copy()
+    h, w, _ = frame.shape
     if laserMode:
-        frame = mp_image.numpy_view().copy()
-        h, w, _ = frame.shape
 
         if result.hand_landmarks:
             hand = result.hand_landmarks[0]
@@ -323,20 +330,10 @@ def callback(result, mp_image, timestamp_ms):
             hit_point = None
 
         latest_frame = frame
+        
 
 # ---------------------------------------------------------------------------
 # MediaPipe setup
-    global latest_frame
-    global holding_index_pinch
-    global holding_middle_pinch
-    global index_pinch_time
-    global middle_pinch_time
-    global latest_frame
-    global canvas
-    global prev_point
-
-    frame = mp_image.numpy_view().copy()
-    h, w, _ = frame.shape
 
     if canvas is None:
         canvas = frame.copy()
@@ -404,8 +401,7 @@ def callback(result, mp_image, timestamp_ms):
             middle_pinch_time = 0
         
         draw_anchor_rect(frame,anchor)
-        if laserMode:
-            get_cursor_pos(hand,anchor,1920,1080)
+        get_cursor_pos(hand,anchor,1920,1080)
 
         # Draw skeleton
         for a, b in CONNECTIONS:
@@ -467,50 +463,51 @@ while cap.isOpened():
     display = latest_frame if latest_frame is not None else frame
     cv2.imshow("Hand Skeleton", display)
 
-  if laserMode:
-    if key == ord('+') or key == ord('='):
-        Z_SCALE = round(Z_SCALE + 0.5, 1)
-        print(f"Z_SCALE → {Z_SCALE}")
-    elif key == ord('-'):
-        Z_SCALE = round(max(0.5, Z_SCALE - 0.5), 1)
-        print(f"Z_SCALE → {Z_SCALE}")
-    elif key == ord('r'):
-        calibMidFingerDist = 0.0
-        print("Depth calibration reset")
-    elif key == ord('c'):
-        if not calib_mode:
-            calib_mode   = True
-            calib_corner = 0
-            calib_hits   = {}
-            print(f"Corner calibration started. Point at {CORNER_NAMES[0]} and press C.")
-        elif hit_point and calib_corner < 4:
-            calib_hits[calib_corner] = hit_point
-            print(f"  Recorded {CORNER_NAMES[calib_corner]}: {hit_point}")
-            calib_corner += 1
-            if calib_corner < 4:
-                print(f"  Now point at {CORNER_NAMES[calib_corner]} and press C.")
-            else:
-                xs = [calib_hits[i][0] for i in range(4)]
-                ys = [calib_hits[i][1] for i in range(4)]
-                # Update globals directly
-                HIT_X_MIN = min(xs)
-                HIT_X_MAX = max(xs)
-                HIT_Y_MIN = min(ys)
-                HIT_Y_MAX = max(ys)
-                # Patch hit_to_screen's closure by redefining it
-                def hit_to_screen(hit_x, hit_y,
-                                  xmin=HIT_X_MIN, xmax=HIT_X_MAX,
-                                  ymin=HIT_Y_MIN, ymax=HIT_Y_MAX):
-                    sx = (hit_x - xmin) / (xmax - xmin)
-                    sy = (hit_y - ymin) / (ymax - ymin)
-                    sx = max(0.0, min(1.0, sx))
-                    sy = max(0.0, min(1.0, sy))
-                    return int(sx * SCREEN_WIDTH), int(sy * SCREEN_HEIGHT)
-                calib_mode = False
-                print("Calibration done!")
-                print(f"  HIT_X_MIN={HIT_X_MIN:.3f}  HIT_X_MAX={HIT_X_MAX:.3f}")
-                print(f"  HIT_Y_MIN={HIT_Y_MIN:.3f}  HIT_Y_MAX={HIT_Y_MAX:.3f}")
-                print("  Copy these into the config at the top to make permanent.")
+    if laserMode:
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('+') or key == ord('='):
+            Z_SCALE = round(Z_SCALE + 0.5, 1)
+            print(f"Z_SCALE → {Z_SCALE}")
+        elif key == ord('-'):
+            Z_SCALE = round(max(0.5, Z_SCALE - 0.5), 1)
+            print(f"Z_SCALE → {Z_SCALE}")
+        elif key == ord('r'):
+            calibMidFingerDist = 0.0
+            print("Depth calibration reset")
+        elif key == ord('c'):
+            if not calib_mode:
+                calib_mode   = True
+                calib_corner = 0
+                calib_hits   = {}
+                print(f"Corner calibration started. Point at {CORNER_NAMES[0]} and press C.")
+            elif hit_point and calib_corner < 4:
+                calib_hits[calib_corner] = hit_point
+                print(f"  Recorded {CORNER_NAMES[calib_corner]}: {hit_point}")
+                calib_corner += 1
+                if calib_corner < 4:
+                    print(f"  Now point at {CORNER_NAMES[calib_corner]} and press C.")
+                else:
+                    xs = [calib_hits[i][0] for i in range(4)]
+                    ys = [calib_hits[i][1] for i in range(4)]
+                    # Update globals directly
+                    HIT_X_MIN = min(xs)
+                    HIT_X_MAX = max(xs)
+                    HIT_Y_MIN = min(ys)
+                    HIT_Y_MAX = max(ys)
+                    # Patch hit_to_screen's closure by redefining it
+                    def hit_to_screen(hit_x, hit_y,
+                                    xmin=HIT_X_MIN, xmax=HIT_X_MAX,
+                                    ymin=HIT_Y_MIN, ymax=HIT_Y_MAX):
+                        sx = (hit_x - xmin) / (xmax - xmin)
+                        sy = (hit_y - ymin) / (ymax - ymin)
+                        sx = max(0.0, min(1.0, sx))
+                        sy = max(0.0, min(1.0, sy))
+                        return int(sx * SCREEN_WIDTH), int(sy * SCREEN_HEIGHT)
+                    calib_mode = False
+                    print("Calibration done!")
+                    print(f"  HIT_X_MIN={HIT_X_MIN:.3f}  HIT_X_MAX={HIT_X_MAX:.3f}")
+                    print(f"  HIT_Y_MIN={HIT_Y_MIN:.3f}  HIT_Y_MAX={HIT_Y_MAX:.3f}")
+                    print("  Copy these into the config at the top to make permanent.")
     if cv2.waitKey(1) & 0xFF == 27:
         break
 
