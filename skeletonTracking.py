@@ -126,20 +126,23 @@ def callback(result, mp_image, timestamp_ms):
     if result.hand_landmarks:
         hand = result.hand_landmarks[0]
 
+        if is_Fist(hand):
+            do_slides = False
+            calibrate(hand)
+        else:
+            do_slides = True
+
         # -------- INDEX PINCH --------
-        if is_Index_Pinch(hand):
+        if is_Index_Pinch(hand) and do_slides:
             next_slide()
         else:
             holding_index_pinch = False
 
         # -------- MIDDLE PINCH --------
-        if is_Middle_Pinch(hand):
+        if is_Middle_Pinch(hand) and do_slides:
             prev_slide()
         else:
             holding_middle_pinch = False
-
-        if is_Fist(hand):
-            calibrate(hand)
         
         draw_anchor_rect(frame,anchor)
 
