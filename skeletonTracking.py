@@ -145,7 +145,7 @@ landmarker = HandLandmarker.create_from_options(options)
 # ---------------------------------------------------------------------------
 # Webcam loop
 # ---------------------------------------------------------------------------
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 ts_freq = cv2.getTickFrequency()
 
 while cap.isOpened():
