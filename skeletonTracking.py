@@ -4,6 +4,7 @@ from pathlib import Path
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, RunningMode
 import math
+import win32api
 import time
 import keyboard
 
@@ -61,7 +62,30 @@ def calibrate(hand):
         "y": hand[0].y,
         "scale": getScale(hand)
     }
-    # print("Calibrated "+ str(anchor["x"]) + " " + str(anchor["y"]))
+    print("Calibrated "+ str(anchor["x"]) + " " + str(anchor["y"]))
+
+
+def get_cursor_pos(hand, anchor, screen_w, screen_h, sensitivity=1.6):
+    if anchor is None:
+        return None
+
+    half = anchor["scale"] * sensitivity
+
+    palm_x = hand[0].x
+    palm_y = hand[0].y
+
+    # normalise palm position within the rectangle (0.0 to 1.0)
+    norm_x = (palm_x - (anchor["x"] - half)) / (2 * half)
+    norm_y = (palm_y - (anchor["y"] - half)) / (2 * half)
+
+    # clamp so it doesn't go off screen
+    norm_x = max(0.0, min(1.0, norm_x))
+    norm_y = max(0.0, min(1.0, norm_y))
+
+    cursor_x = int(norm_x * screen_w)
+    cursor_y = int(norm_y * screen_h)
+
+    win32api.SetCursorPos((cursor_x, cursor_y))
 
 def draw_anchor_rect(frame, anchor):
     if anchor is None:
