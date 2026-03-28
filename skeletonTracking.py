@@ -3,6 +3,7 @@ import mediapipe as mp
 from pathlib import Path
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, RunningMode
+import math
 
 # ---------------------------------------------------------------------------
 # Model path
@@ -22,6 +23,24 @@ CONNECTIONS = [
 
 latest_frame = None
 
+
+def getScale(hand):
+    #0-5, 5-6, 6-7, 7-8
+    dist = 0
+    dist += distance(hand[0],hand[5])
+    dist += distance(hand[5],hand[6])
+    dist += distance(hand[6],hand[7])
+    dist += distance(hand[7],hand[8])
+    return dist
+
+def distance(a, b):
+    return math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
+
+def is_Pinch(hand, threshHold = 0.15):
+    scale = getScale(hand)
+    d = distance(hand[4],hand[8])
+    return (d / scale) < threshHold
+    
 # ---------------------------------------------------------------------------
 # Callback
 # ---------------------------------------------------------------------------
@@ -33,6 +52,7 @@ def callback(result, mp_image, timestamp_ms):
 
     if result.hand_landmarks:
         hand = result.hand_landmarks[0]
+        print(is_Pinch(hand))
 
         # Draw skeleton
         for a, b in CONNECTIONS:
