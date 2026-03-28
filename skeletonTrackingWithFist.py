@@ -98,7 +98,15 @@ def callback(result, mp_image, timestamp_ms):
 
         if pinch:
             if prev_point is not None:
-                cv2.line(canvas, prev_point, current_point, (0, 0, 255), 4)
+                dx = current_point[0] - prev_point[0]
+                dy = current_point[1] - prev_point[1]
+                dist = int(math.hypot(dx, dy))
+
+                for i in range(dist):
+                    t = i / dist if dist != 0 else 0
+                    x = int(prev_point[0] + dx * t)
+                    y = int(prev_point[1] + dy * t)
+                    cv2.circle(canvas, (x, y), 2, (0, 0, 255), -1)
 
             prev_point = current_point
 
