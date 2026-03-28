@@ -4,6 +4,8 @@ from pathlib import Path
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, RunningMode
 import math
+import time
+import keyboard
 
 # ---------------------------------------------------------------------------
 # Model path
@@ -23,6 +25,10 @@ CONNECTIONS = [
 
 latest_frame = None
 anchor = None
+holding_index_pinch = False
+holding_middle_pinch = False
+last_pinch = 0
+COOLDOWN = 0.2  # seconds
 
 def getScale(hand):
     #0-5, 5-6, 6-7, 7-8
@@ -36,6 +42,16 @@ def getScale(hand):
 def distance(a, b):
     return math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
 
+def is_Index_Pinch(hand, threshHold = 0.15):
+    scale = getScale(hand)
+    d = distance(hand[4],hand[8])
+    return (d / scale) < threshHold
+
+def is_Middle_Pinch(hand, threshHold = 0.15):
+    scale = getScale(hand)
+    d = distance(hand[4],hand[12])
+    return (d / scale) < threshHold
+
 def calibrate(hand):
     global anchor
     anchor = {
@@ -43,9 +59,7 @@ def calibrate(hand):
         "y": hand[0].y,
         "scale": getScale(hand)
     }
-    print("Calibrated "+ str(anchor["x"]) + " " + str(anchor["y"]))
-
-
+    # print("Calibrated "+ str(anchor["x"]) + " " + str(anchor["y"]))
 
 def draw_anchor_rect(frame, anchor):
     if anchor is None:
@@ -67,24 +81,64 @@ def draw_anchor_rect(frame, anchor):
     cx = int(anchor["x"] * w)
     cy = int(anchor["y"] * h)
     cv2.circle(frame, (cx, cy), 5, (255, 255, 255), -1)
-def is_Pinch(hand, threshHold = 0.15):
+
+# checks for closed fist facing camera
+# fingers closed with open thumb will return false
+def is_Fist(hand, fingerThreshHold = 0.55, thumbThreshHold = 0.2):
     scale = getScale(hand)
-    d = distance(hand[4],hand[8])
-    return (d / scale) < threshHold
+    fingersDistance = distance(hand[12],hand[0]) # distance between tip of middle finger and centre of hand
+    thumbDistance = distance(hand[4], hand[14] ) # distance between thumb and second knuckle of fourth finger
+    return ((fingersDistance / scale) < fingerThreshHold) and ((thumbDistance / scale) < thumbThreshHold)
     
+def next_slide():
+    global holding_index_pinch
+    global last_pinch
+    now = time.monotonic()
+    if not holding_index_pinch:
+        if now - last_pinch > COOLDOWN:
+            keyboard.send("right")
+            print("next slide")
+            last_pinch = now
+    holding_index_pinch = True
+
+def prev_slide():
+    global holding_middle_pinch
+    global last_pinch
+    now = time.monotonic()
+    if not holding_middle_pinch:
+        if now - last_pinch > COOLDOWN:
+            keyboard.send("left")
+            print("prev slide")
+            last_pinch = now
+    holding_middle_pinch = True
+
 # ---------------------------------------------------------------------------
 # Callback
 # ---------------------------------------------------------------------------
 def callback(result, mp_image, timestamp_ms):
     global latest_frame
+    global holding_index_pinch
+    global holding_middle_pinch
 
     frame = mp_image.numpy_view().copy()
     h, w, _ = frame.shape
 
     if result.hand_landmarks:
         hand = result.hand_landmarks[0]
-        print(is_Pinch(hand))
-        if is_Pinch(hand):
+
+        # -------- INDEX PINCH --------
+        if is_Index_Pinch(hand):
+            next_slide()
+        else:
+            holding_index_pinch = False
+
+        # -------- MIDDLE PINCH --------
+        if is_Middle_Pinch(hand):
+            prev_slide()
+        else:
+            holding_middle_pinch = False
+
+        if is_Fist(hand):
             calibrate(hand)
         
         draw_anchor_rect(frame,anchor)
