@@ -1,4 +1,5 @@
 import cv2
+import mediapipe as mp
 from pathlib import Path
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, RunningMode
@@ -9,7 +10,7 @@ from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions,
 model_path = str((Path(__file__).parent / "hand_landmarker.task").resolve())
 
 # ---------------------------------------------------------------------------
-# Drawing connections (same as before)
+# Skeleton connections
 # ---------------------------------------------------------------------------
 CONNECTIONS = [
     (0,1),(1,2),(2,3),(3,4),
@@ -19,11 +20,11 @@ CONNECTIONS = [
     (13,17),(0,17),(17,18),(18,19),(19,20),
 ]
 
+latest_frame = None
+
 # ---------------------------------------------------------------------------
 # Callback
 # ---------------------------------------------------------------------------
-latest_frame = None
-
 def callback(result, mp_image, timestamp_ms):
     global latest_frame
 
@@ -33,13 +34,13 @@ def callback(result, mp_image, timestamp_ms):
     if result.hand_landmarks:
         hand = result.hand_landmarks[0]
 
-        # --- Draw skeleton ---
+        # Draw skeleton
         for a, b in CONNECTIONS:
             ax, ay = int(hand[a].x * w), int(hand[a].y * h)
             bx, by = int(hand[b].x * w), int(hand[b].y * h)
             cv2.line(frame, (ax, ay), (bx, by), (200, 200, 200), 1)
 
-        # --- Draw points + coordinates ---
+        # Draw points + coordinates
         for i, lm in enumerate(hand):
             cx, cy = int(lm.x * w), int(lm.y * h)
 
@@ -48,18 +49,10 @@ def callback(result, mp_image, timestamp_ms):
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4,
                         (255, 255, 255), 1)
 
-            # Print coordinates
-            print(f"Landmark {i}: ({cx}, {cy})")
-
-    else:
-        cv2.putText(frame, "NO HAND", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7,
-                    (100, 100, 100), 2)
-
     latest_frame = frame
 
 # ---------------------------------------------------------------------------
-# MediaPipe setup
+# MediaPipe setup (NEW API)
 # ---------------------------------------------------------------------------
 options = HandLandmarkerOptions(
     base_options=python.BaseOptions(model_asset_path=model_path),
@@ -76,8 +69,6 @@ landmarker = HandLandmarker.create_from_options(options)
 cap = cv2.VideoCapture(0)
 ts_freq = cv2.getTickFrequency()
 
-print("Press ESC to quit")
-
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
@@ -85,13 +76,16 @@ while cap.isOpened():
 
     frame = cv2.flip(frame, 1)
 
-    mp_image = python.Image(image_format=python.ImageFormat.SRGB, data=frame)
-    timestamp = int(cv2.getTickCount() / ts_freq * 1000)
+    mp_image = mp.Image(
+        image_format=mp.ImageFormat.SRGB,
+        data=frame
+    )
 
+    timestamp = int(cv2.getTickCount() / ts_freq * 1000)
     landmarker.detect_async(mp_image, timestamp)
 
     display = latest_frame if latest_frame is not None else frame
-    cv2.imshow("Hand Skeleton (Tasks API)", display)
+    cv2.imshow("Hand Skeleton", display)
 
     if cv2.waitKey(1) & 0xFF == 27:
         break
