@@ -4,6 +4,9 @@ from pathlib import Path
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, RunningMode
 import math
+import time
+import keyboard
+
 
 # ---------------------------------------------------------------------------
 # Model path
@@ -22,6 +25,10 @@ CONNECTIONS = [
 ]
 
 latest_frame = None
+holding_index_pinch = False
+holding_middle_pinch = False
+last_pinch = 0
+COOLDOWN = 0.2  # seconds
 
 
 def getScale(hand):
@@ -36,23 +43,56 @@ def getScale(hand):
 def distance(a, b):
     return math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
 
-def is_Pinch(hand, threshHold = 0.15):
+def is_Index_Pinch(hand, threshHold = 0.15):
     scale = getScale(hand)
-    d = distance(hand[4],hand[8])
-    return (d / scale) < threshHold
+    d1 = distance(hand[4],hand[8])
+    d2 = distance(hand[4],hand[12])
+    return (d1 / scale) < threshHold
+
+def is_Middle_Pinch(hand, threshHold = 0.15):
+    scale = getScale(hand)
+    d1 = distance(hand[4],hand[12])
+    d2 = distance(hand[4],hand[8])
+    return (d1 / scale) < threshHold
     
 # ---------------------------------------------------------------------------
 # Callback
 # ---------------------------------------------------------------------------
 def callback(result, mp_image, timestamp_ms):
     global latest_frame
+    global holding_index_pinch
+    global holding_middle_pinch
+    global last_pinch
 
     frame = mp_image.numpy_view().copy()
     h, w, _ = frame.shape
 
+    now = time.monotonic()
+
     if result.hand_landmarks:
         hand = result.hand_landmarks[0]
-        print(is_Pinch(hand))
+
+        # -------- INDEX PINCH --------
+        if is_Index_Pinch(hand):
+            if not holding_index_pinch:
+                if now - last_pinch > COOLDOWN:
+                    keyboard.send("right")
+                    last_pinch = now
+
+            holding_index_pinch = True
+        else:
+            holding_index_pinch = False
+
+        # -------- MIDDLE PINCH --------
+        if is_Middle_Pinch(hand):
+            if not holding_middle_pinch:
+                if now - last_pinch > COOLDOWN:
+                    keyboard.send("left")
+                    last_pinch = now
+
+            holding_middle_pinch = True
+        else:
+            holding_middle_pinch = False
 
         # Draw skeleton
         for a, b in CONNECTIONS:
