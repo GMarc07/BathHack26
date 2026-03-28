@@ -65,7 +65,7 @@ hit_point          = None
 debug_str          = ""
 
 calib_mode   = False
-laserMode = True
+laserMode = False
 calib_corner = 0
 calib_hits   = {}
 CORNER_NAMES = ["TOP-LEFT", "TOP-RIGHT", "BOTTOM-LEFT", "BOTTOM-RIGHT"]
