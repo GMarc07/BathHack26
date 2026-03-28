@@ -8,6 +8,21 @@ import win32api
 import time
 import keyboard
 
+class OneEuroPoint:
+    def __init__(self, alpha=0.2):
+        self.alpha = alpha
+        self.x = None
+        self.y = None
+
+    def update(self, x, y):
+        if self.x is None:
+            self.x, self.y = x, y
+            return x, y
+
+        self.x = self.alpha * x + (1 - self.alpha) * self.x
+        self.y = self.alpha * y + (1 - self.alpha) * self.y
+        return int(self.x), int(self.y)
+
 # ---------------------------------------------------------------------------
 # Model path
 # ---------------------------------------------------------------------------
@@ -32,6 +47,15 @@ last_pinch = 0
 index_pinch_time = 0
 middle_pinch_time = 0
 COOLDOWN = 0.2  # seconds
+canvas = None
+prev_point = None
+pinch_buffer = []
+smooth_tip = OneEuroPoint(alpha=0.25)
+drawing_active = False
+locked_scale = None
+prev_point = None
+scale_thresh = 0.15
+scale_fail_count = 0
 
 def getScale(hand):
     #0-5, 5-6, 6-7, 7-8
@@ -44,6 +68,12 @@ def getScale(hand):
 
 def distance(a, b):
     return math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
+
+def is_penPinch(hand, fingerThreshHold = 0.15, thumbThreshHold = 0.30):
+    scale = getScale(hand)
+    indexDistance = distance(hand[12],hand[8])
+    thumbDistance = distance(hand[4], hand[16])
+    return ((indexDistance / scale) < fingerThreshHold) and ((thumbDistance / scale) < thumbThreshHold)
 
 def is_Index_Pinch(hand, threshHold = 0.15):
     scale = getScale(hand)
@@ -147,12 +177,48 @@ def callback(result, mp_image, timestamp_ms):
     global holding_middle_pinch
     global index_pinch_time
     global middle_pinch_time
+    global latest_frame
+    global canvas
+    global prev_point
 
     frame = mp_image.numpy_view().copy()
     h, w, _ = frame.shape
 
-    if result.hand_landmarks:
+    if canvas is None:
+        canvas = frame.copy()
+        canvas[:] = (0, 0, 0)
+
+    if result.hand_landmarks and len(result.hand_landmarks) > 0:
         hand = result.hand_landmarks[0]
+
+        # smoothed pen tip
+        raw_x = hand[8].x * w
+        raw_y = hand[8].y * h
+        x, y = smooth_tip.update(raw_x, raw_y)
+        current_point = (x, y)
+
+        # -------------------------
+        # PINCH = DRAW
+        # -------------------------
+        pinch = is_penPinch(hand)
+
+        if pinch:
+            if prev_point is not None:
+                dx = current_point[0] - prev_point[0]
+                dy = current_point[1] - prev_point[1]
+                dist = int(math.hypot(dx, dy))
+
+                for i in range(dist):
+                    t = i / dist if dist != 0 else 0
+                    x = int(prev_point[0] + dx * t)
+                    y = int(prev_point[1] + dy * t)
+                    cv2.circle(canvas, (x, y), 2, (0, 0, 255), -1)
+
+            prev_point = current_point
+
+        else:
+            # pen lifted
+            prev_point = None
 
         if is_Fist(hand):
             do_slides = False
@@ -198,8 +264,11 @@ def callback(result, mp_image, timestamp_ms):
             cv2.putText(frame, str(i), (cx, cy),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4,
                         (255, 255, 255), 1)
+    else:
+        prev_point = None # lost tracking - stop drawing
 
-    latest_frame = frame
+
+    latest_frame = cv2.addWeighted(frame, 0.7, canvas, 0.3, 0)
 
 # ---------------------------------------------------------------------------
 # MediaPipe setup (NEW API)
