@@ -22,7 +22,7 @@ CONNECTIONS = [
 ]
 
 latest_frame = None
-
+anchor = None
 
 def getScale(hand):
     #0-5, 5-6, 6-7, 7-8
