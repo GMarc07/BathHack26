@@ -56,6 +56,7 @@ locked_scale = None
 prev_point = None
 scale_thresh = 0.15
 scale_fail_count = 0
+laserMode = True
 
 def getScale(hand):
     #0-5, 5-6, 6-7, 7-8
@@ -180,6 +181,7 @@ def callback(result, mp_image, timestamp_ms):
     global latest_frame
     global canvas
     global prev_point
+    global laserMode
 
     frame = mp_image.numpy_view().copy()
     h, w, _ = frame.shape
@@ -220,11 +222,13 @@ def callback(result, mp_image, timestamp_ms):
             # pen lifted
             prev_point = None
 
-        if is_Fist(hand):
-            do_slides = False
-            calibrate(hand)
-        else:
-            do_slides = True
+        do_slides = True
+        if not laserMode:
+            if is_Fist(hand):
+                do_slides = False
+                calibrate(hand)
+            else:
+                do_slides = True
 
         # -------- INDEX PINCH --------#
         if is_Index_Pinch(hand) and do_slides:
@@ -248,7 +252,8 @@ def callback(result, mp_image, timestamp_ms):
             middle_pinch_time = 0
         
         draw_anchor_rect(frame,anchor)
-        get_cursor_pos(hand,anchor,1920,1080)
+        if laserMode:
+            get_cursor_pos(hand,anchor,1920,1080)
 
         # Draw skeleton
         for a, b in CONNECTIONS:
