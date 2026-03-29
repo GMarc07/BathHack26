@@ -4,5 +4,6 @@
   "pinch_threshold": 0.124,
   "screen_width": 1920,
   "screen_height": 1080,
-  "num_hands": 1
+  "num_hands": 1,
+  "mouse_mode": "Fist"
 }
