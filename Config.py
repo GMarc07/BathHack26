@@ -18,8 +18,8 @@ DEFAULTS = {
     "screen_width": 1920,
     "screen_height": 1080,
     "num_hands": 1,
+    "mouse_mode": "Fist"
 }
-
 
 def load_config() -> dict:
     if CONFIG_FILE.exists():
@@ -31,15 +31,9 @@ def load_config() -> dict:
             pass
     return dict(DEFAULTS)
 
-
 def save_config(cfg: dict):
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
-
-
-# ──────────────────────────────────────────────
-# App
-# ──────────────────────────────────────────────
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -51,7 +45,7 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Hand Tracker — Config")
-        self.geometry("480x640")
+        self.geometry("480x600")
         self.resizable(False, False)
 
         self.cfg = load_config()
@@ -60,13 +54,16 @@ class App(ctk.CTk):
 
         self._build_ui()
 
-    # ── UI construction ────────────────────────
+    # ──────────────────────────────────────────────
+    # UI
+    # ──────────────────────────────────────────────
 
     def _build_ui(self):
-        ctk.CTkLabel(self, text="Hand Tracker Config",
-                     font=ctk.CTkFont(size=18, weight="bold")
-                     ).pack(pady=(16, 4))
 
+        title = ctk.CTkLabel(self, text="Hand Tracker Config",
+                             font=ctk.CTkFont(size=20, weight="bold"))
+        title.pack(pady=(20, 4))
+    
         self.tabs = ctk.CTkTabview(self, width=460, height=520)
         self.tabs.pack(padx=10, pady=(0, 6), fill="both", expand=True)
 
@@ -75,6 +72,19 @@ class App(ctk.CTk):
 
         self._build_settings_tab(self.tabs.tab("Settings"))
         self._build_gestures_tab(self.tabs.tab("Gestures"))
+
+        subtitle = ctk.CTkLabel(self, text="⚡ = applies live   •   ⟳ = requires restart",
+                                text_color="gray65", font=ctk.CTkFont(size=12))
+        subtitle.pack(pady=(0, 16))
+
+        # Main form container
+        self.form = ctk.CTkFrame(self, fg_color="transparent")
+        self.form.pack(fill="both", expand=True, padx=20)
+
+        row = 0
+
+        # ── Camera ──────────────────────────────
+        self._section("Camera", row); row += 1
 
         # ── Global status ──
         self.status_label = ctk.CTkLabel(self, text="", text_color="gray60",
@@ -92,49 +102,65 @@ class App(ctk.CTk):
 
         self._section(parent, "Camera")
         self.camera_var = ctk.IntVar(value=self.cfg["camera_index"])
-        self._row(parent, "Camera index  ⟳",
-                  ctk.CTkOptionMenu(parent, values=["0", "1", "2", "3"],
-                                    variable=ctk.StringVar(value=str(self.cfg["camera_index"])),
-                                    command=lambda v: self.camera_var.set(int(v)),
-                                    width=100))
+        cam_menu = ctk.CTkOptionMenu(self.form, values=["0", "1", "2", "3"],
+                                     variable=ctk.StringVar(value=str(self.cfg["camera_index"])),
+                                     command=lambda v: self.camera_var.set(int(v)),
+                                     width=100)
+        self._row("Camera index  ⟳", cam_menu, row); row += 1
 
-        self._section(parent, "Screen Resolution  ⚡")
+        # ── Screen Resolution ───────────────────
+        self._section("Screen Resolution  ⚡", row); row += 1
+
         self.sw_var = ctk.IntVar(value=self.cfg["screen_width"])
         self.sh_var = ctk.IntVar(value=self.cfg["screen_height"])
-        res_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        res_frame.pack(fill="x", **pad)
-        ctk.CTkLabel(res_frame, text="Width", width=60).pack(side="left")
-        ctk.CTkEntry(res_frame, textvariable=self.sw_var, width=80).pack(side="left", padx=(0, 20))
-        ctk.CTkLabel(res_frame, text="Height", width=60).pack(side="left")
-        ctk.CTkEntry(res_frame, textvariable=self.sh_var, width=80).pack(side="left")
+
+        sw_entry = ctk.CTkEntry(self.form, textvariable=self.sw_var, width=80)
+        sh_entry = ctk.CTkEntry(self.form, textvariable=self.sh_var, width=80)
+
+        self._row("Width", sw_entry, row); row += 1
+        self._row("Height", sh_entry, row); row += 1
+
+        # ── Tracking ─────────────────────────────
+        self._section("Tracking", row); row += 1
 
         self._section(parent, "Tracking")
         self.sens_var = ctk.DoubleVar(value=self.cfg["sensitivity"])
-        self._slider_row(parent, "Sensitivity  ⚡", self.sens_var, 0.5, 4.0)
+        self._slider_row("Sensitivity  ⚡", self.sens_var, 0.5, 4.0, row); row += 1
+
         self.pinch_var = ctk.DoubleVar(value=self.cfg["pinch_threshold"])
-        self._slider_row(parent, "Pinch threshold  ⚡", self.pinch_var, 0.05, 0.40)
+        self._slider_row("Pinch threshold  ⚡", self.pinch_var, 0.05, 0.40, row); row += 1
+
         self.hands_var = ctk.IntVar(value=self.cfg["num_hands"])
-        self._row(parent, "Max hands  ⟳",
-                  ctk.CTkOptionMenu(parent, values=["1", "2"],
-                                    variable=ctk.StringVar(value=str(self.cfg["num_hands"])),
-                                    command=lambda v: self.hands_var.set(int(v)),
-                                    width=100))
+        hands_menu = ctk.CTkOptionMenu(self.form, values=["1", "2"],
+                                       variable=ctk.StringVar(value=str(self.cfg["num_hands"])),
+                                       command=lambda v: self.hands_var.set(int(v)),
+                                       width=100)
+        self._row("Max hands  ⟳", hands_menu, row); row += 1
 
-        btn_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=20, pady=(20, 6))
+        self.mouse_var = ctk.StringVar(value=self.cfg["mouse_mode"])
+        mouse_menu = ctk.CTkOptionMenu(self.form, values=["Fist", "Point"],
+                                       variable=self.mouse_var,
+                                       command=lambda v: self.mouse_var.set(v),
+                                       width=100)
+        self._row("Mouse mode", mouse_menu, row); row += 1
 
-        ctk.CTkButton(btn_frame, text="💾  Save", width=120,
-                      command=self._on_save).pack(side="left", padx=(0, 10))
+        # ── Buttons ──────────────────────────────
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=20)
+
+        self.save_btn = ctk.CTkButton(btn_frame, text="💾  Save", width=120,
+                                      command=self._on_save)
+        self.save_btn.grid(row=0, column=0, padx=10)
 
         self.launch_btn = ctk.CTkButton(btn_frame, text="▶  Launch tracker",
                                         fg_color="#2a7d4f", hover_color="#1f5c39",
                                         command=self._on_launch)
-        self.launch_btn.pack(side="left")
+        self.launch_btn.grid(row=0, column=1, padx=10)
 
         self.stop_btn = ctk.CTkButton(btn_frame, text="■  Stop tracker",
                                       fg_color="#7d2a2a", hover_color="#5c1f1f",
                                       command=self._on_stop, state="disabled")
-        self.stop_btn.pack(side="left", padx=(10, 0))
+        self.stop_btn.grid(row=0, column=2, padx=10)
 
     # ── Gestures tab ──────────────────────────
 
@@ -212,32 +238,39 @@ class App(ctk.CTk):
         # Scrollable list frame
         self.gesture_scroll = ctk.CTkScrollableFrame(parent, height=170)
         self.gesture_scroll.pack(fill="x", padx=12, pady=(0, 8))
-
         self._refresh_gesture_list()
 
-    # ── Settings helpers ──────────────────────
+    # ──────────────────────────────────────────────
+    # Layout helpers
+    # ──────────────────────────────────────────────
 
-    def _section(self, parent, title):
-        ctk.CTkLabel(parent, text=title,
-                     font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color="gray80"
-                     ).pack(anchor="w", padx=20, pady=(14, 2))
+    def _section(self, title: str, row: int):
+        lbl = ctk.CTkLabel(self.form, text=title,
+                           font=ctk.CTkFont(size=14, weight="bold"),
+                           text_color="gray80")
+        lbl.grid(row=row, column=0, columnspan=3, sticky="w", pady=(12, 4))
 
-    def _row(self, parent, label, widget):
-        row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", padx=20, pady=(4, 0))
-        ctk.CTkLabel(row, text=label, width=180, anchor="w").pack(side="left")
-        widget.pack(side="left")
+    def _row(self, label: str, widget, row: int):
+        ctk.CTkLabel(self.form, text=label, anchor="w").grid(
+            row=row, column=0, sticky="w", pady=4
+        )
+        widget.grid(row=row, column=1, sticky="w", pady=4)
 
-    def _slider_row(self, parent, label, var, lo, hi):
-        frame = ctk.CTkFrame(parent, fg_color="transparent")
-        frame.pack(fill="x", padx=20, pady=(4, 0))
-        ctk.CTkLabel(frame, text=label, width=160, anchor="w").pack(side="left")
-        val_label = ctk.CTkLabel(frame, text=f"{var.get():.2f}", width=40)
-        val_label.pack(side="right")
-        ctk.CTkSlider(frame, from_=lo, to=hi, variable=var,
-                      command=lambda v: val_label.configure(text=f"{float(v):.2f}"),
-                      width=160).pack(side="left", padx=(0, 6))
+    def _slider_row(self, label: str, var, lo, hi, row: int):
+        ctk.CTkLabel(self.form, text=label, anchor="w").grid(
+            row=row, column=0, sticky="w", pady=4
+        )
+
+        slider = ctk.CTkSlider(self.form, from_=lo, to=hi, variable=var, width=160)
+        slider.grid(row=row, column=1, sticky="w", pady=4)
+
+        val_label = ctk.CTkLabel(self.form, text=f"{var.get():.2f}")
+        val_label.grid(row=row, column=2, sticky="w", padx=10)
+        
+        def on_slide(v):
+            val_label.configure(text=f"{float(v):.2f}")
+
+        slider.configure(command=on_slide)
 
     # ── Gesture helpers ───────────────────────
 
@@ -348,12 +381,13 @@ class App(ctk.CTk):
 
     def _collect(self) -> dict:
         return {
-            "camera_index":    self.camera_var.get(),
-            "sensitivity":     round(self.sens_var.get(), 3),
+            "camera_index": self.camera_var.get(),
+            "sensitivity": round(self.sens_var.get(), 3),
             "pinch_threshold": round(self.pinch_var.get(), 3),
-            "screen_width":    self.sw_var.get(),
-            "screen_height":   self.sh_var.get(),
-            "num_hands":       self.hands_var.get(),
+            "screen_width": self.sw_var.get(),
+            "screen_height": self.sh_var.get(),
+            "num_hands": self.hands_var.get(),
+            "mouse_mode": self.mouse_var.get(),
         }
 
     def _on_save(self):
