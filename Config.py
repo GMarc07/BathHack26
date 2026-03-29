@@ -70,6 +70,10 @@ class App(ctk.CTk):
         self.tabs.add("Settings")
         self.tabs.add("Gestures")
 
+        # Main form container
+        self.form = ctk.CTkFrame(self, fg_color="transparent")
+        self.form.pack(fill="both", expand=True, padx=20)
+
         self._build_settings_tab(self.tabs.tab("Settings"))
         self._build_gestures_tab(self.tabs.tab("Gestures"))
 
@@ -77,9 +81,7 @@ class App(ctk.CTk):
                                 text_color="gray65", font=ctk.CTkFont(size=12))
         subtitle.pack(pady=(0, 16))
 
-        # Main form container
-        self.form = ctk.CTkFrame(self, fg_color="transparent")
-        self.form.pack(fill="both", expand=True, padx=20)
+
 
         row = 0
 
@@ -94,13 +96,14 @@ class App(ctk.CTk):
     # ── Settings tab ──────────────────────────
 
     def _build_settings_tab(self, parent):
+        row = 0
         pad = {"padx": 20, "pady": (6, 0)}
 
         ctk.CTkLabel(parent, text="⚡ = applies live   •   ⟳ = requires restart",
                      text_color="gray55", font=ctk.CTkFont(size=12)
                      ).pack(pady=(8, 6))
 
-        self._section(parent, "Camera")
+        self._section("Camera", row)
         self.camera_var = ctk.IntVar(value=self.cfg["camera_index"])
         cam_menu = ctk.CTkOptionMenu(self.form, values=["0", "1", "2", "3"],
                                      variable=ctk.StringVar(value=str(self.cfg["camera_index"])),
@@ -123,7 +126,6 @@ class App(ctk.CTk):
         # ── Tracking ─────────────────────────────
         self._section("Tracking", row); row += 1
 
-        self._section(parent, "Tracking")
         self.sens_var = ctk.DoubleVar(value=self.cfg["sensitivity"])
         self._slider_row("Sensitivity  ⚡", self.sens_var, 0.5, 4.0, row); row += 1
 
