@@ -286,9 +286,9 @@ def _dispatch_gesture_action(gesture: dict):
     elif action == "custom_key":
         key = gesture.get("key", "")
         if key:
+            print(key)
             try:
-                #import keyboard; keyboard.send(key)
-                print("Keyboard ")
+                keyboard.send(key)            # print("Keyboard ")
             except Exception as e:
                 print(f"[gesture] custom_key '{key}' failed: {e}")
 
