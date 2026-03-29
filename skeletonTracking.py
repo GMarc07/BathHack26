@@ -42,6 +42,7 @@ def load_config():
         "screen_height":    cfg.get("screen_height", 1080),
         "num_hands":        cfg.get("num_hands", 1),
         "camera_index":     cfg.get("camera_index", 1),
+        "mouse_mode":       cfg.get("mouse_mode", "Fist")
     }
 
 _initial = load_config()
@@ -87,7 +88,6 @@ hit_point          = None
 debug_str          = ""
 
 calib_mode   = False
-laserMode = False
 calib_corner = 0
 calib_hits   = {}
 CORNER_NAMES = ["TOP-LEFT", "TOP-RIGHT", "BOTTOM-LEFT", "BOTTOM-RIGHT"]
@@ -198,7 +198,7 @@ def get_cursor_pos(hand, anchor, screen_w, screen_h, sensitivity=1.6):
     cursor_x = int(norm_x * screen_w)
     cursor_y = int(norm_y * screen_h)
 
-    #win32api.SetCursorPos((cursor_x, cursor_y))
+    win32api.SetCursorPos((cursor_x, cursor_y))
 
 def draw_anchor_rect(frame, anchor):
     if anchor is None:
@@ -261,6 +261,9 @@ def callback(result, mp_image, timestamp_ms):
     global canvas
     global prev_point
 
+    _cfg = load_config()
+    laserMode = (_cfg["mouse_mode"] == "Point")
+    print(_cfg["mouse_mode"])
 
     frame = mp_image.numpy_view().copy()
     h, w, _ = frame.shape
@@ -442,6 +445,9 @@ def callback(result, mp_image, timestamp_ms):
 # MediaPipe setup
 # ---------------------------------------------------------------------------
 _cfg = load_config()
+
+laserMode = (_cfg["mouse_mode"] == "Point")
+# laserMode = False
 
 options = HandLandmarkerOptions(
     base_options=python.BaseOptions(model_asset_path=model_path),
