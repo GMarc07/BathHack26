@@ -263,7 +263,6 @@ def callback(result, mp_image, timestamp_ms):
 
     _cfg = load_config()
     laserMode = (_cfg["mouse_mode"] == "Point")
-    print(_cfg["mouse_mode"])
 
     frame = mp_image.numpy_view().copy()
     h, w, _ = frame.shape
