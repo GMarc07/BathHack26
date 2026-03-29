@@ -12,6 +12,7 @@ import time
 import keyboard
 SCREEN_WIDTH  = ctypes.windll.user32.GetSystemMetrics(0)
 SCREEN_HEIGHT = ctypes.windll.user32.GetSystemMetrics(1)
+import GestureEngine as ge
 
 class OneEuroPoint:
     def __init__(self, alpha=0.2):
@@ -249,6 +250,48 @@ def prev_slide():
             last_pinch = now
     holding_middle_pinch = True
 
+
+# ---------------------------------------------------------------------------
+# Gesture action dispatcher
+# ---------------------------------------------------------------------------
+def _dispatch_gesture_action(gesture: dict):
+    action = gesture.get("action", "")
+    name   = gesture.get("name", "?")
+    print(f"[gesture] Triggered: {name!r}  action={action}")
+
+    if action == "next_slide":
+        next_slide()
+    elif action == "prev_slide":
+        prev_slide()
+    elif action == "left_click":
+        try:
+            import pyautogui; pyautogui.click()
+        except Exception as e:
+            print(f"[gesture] left_click failed: {e}")
+    elif action == "right_click":
+        try:
+            import pyautogui; pyautogui.rightClick()
+        except Exception as e:
+            print(f"[gesture] right_click failed: {e}")
+    elif action == "scroll_up":
+        try:
+            import pyautogui; pyautogui.scroll(3)
+        except Exception as e:
+            print(f"[gesture] scroll_up failed: {e}")
+    elif action == "scroll_down":
+        try:
+            import pyautogui; pyautogui.scroll(-3)
+        except Exception as e:
+            print(f"[gesture] scroll_down failed: {e}")
+    elif action == "custom_key":
+        key = gesture.get("key", "")
+        if key:
+            print(key)
+            try:
+                keyboard.send(key)            # print("Keyboard ")
+            except Exception as e:
+                print(f"[gesture] custom_key '{key}' failed: {e}")
+
 # ---------------------------------------------------------------------------
 # Callback
 # ---------------------------------------------------------------------------
@@ -420,6 +463,16 @@ def callback(result, mp_image, timestamp_ms):
             holding_middle_pinch = False
             middle_pinch_time = 0
         
+        # -------- CUSTOM GESTURE RECORDING --------
+        record_req = ge.poll_record_request()
+        if record_req is not None:
+            ge.complete_record(record_req, hand)
+            print(f"[gestures] Recorded '{record_req['name']}'")
+
+        # -------- CUSTOM GESTURE MATCHING --------
+        for matched in ge.check_gestures(hand):
+            _dispatch_gesture_action(matched)
+
         draw_anchor_rect(frame, anchor)
         get_cursor_pos(hand, anchor, SCREEN_W, SCREEN_H, SENSITIVITY)
 
