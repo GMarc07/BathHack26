@@ -6,6 +6,8 @@ from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions,
 import math
 import win32api
 import json
+import time
+#import keyboard
 #import win32api
 
 # ---------------------------------------------------------------------------
@@ -29,7 +31,6 @@ SENSITIVITY     = _initial["sensitivity"]
 PINCH_THRESHOLD = _initial["pinch_threshold"]
 SCREEN_W        = _initial["screen_width"]
 SCREEN_H        = _initial["screen_height"]
-
 # ---------------------------------------------------------------------------
 # Model path
 # ---------------------------------------------------------------------------
@@ -47,10 +48,16 @@ CONNECTIONS = [
 ]
 
 latest_frame = None
-
 anchor = None
+holding_index_pinch = False
+holding_middle_pinch = False
+last_pinch = 0
+index_pinch_time = 0
+middle_pinch_time = 0
+COOLDOWN = 0.2  # seconds
 
 def getScale(hand):
+    #0-5, 5-6, 6-7, 7-8
     dist = 0
     dist += distance(hand[0],hand[5])
     dist += distance(hand[5],hand[6])
@@ -60,6 +67,16 @@ def getScale(hand):
 
 def distance(a, b):
     return math.sqrt((a.x - b.x)**2 + (a.y - b.y)**2)
+
+def is_Index_Pinch(hand, threshHold = 0.15):
+    scale = getScale(hand)
+    d = distance(hand[4],hand[8])
+    return (d / scale) < threshHold
+
+def is_Middle_Pinch(hand, threshHold = 0.15):
+    scale = getScale(hand)
+    d = distance(hand[4],hand[12])
+    return (d / scale) < threshHold
 
 def calibrate(hand):
     global anchor
@@ -110,27 +127,78 @@ def draw_anchor_rect(frame, anchor):
     cy = int(anchor["y"] * h)
     cv2.circle(frame, (cx, cy), 5, (255, 255, 255), -1)
 
-
-def is_Pinch(hand, threshHold=None):
-    if threshHold is None:
-        threshHold = PINCH_THRESHOLD
+# checks for closed fist facing camera
+# fingers closed with open thumb will return false
+def is_Fist(hand, fingerThreshHold = 0.55, thumbThreshHold = 0.2):
     scale = getScale(hand)
-    d = distance(hand[4],hand[8])
-    return (d / scale) < threshHold
+    fingersDistance = distance(hand[12],hand[0]) # distance between tip of middle finger and centre of hand
+    thumbDistance = distance(hand[4], hand[14] ) # distance between thumb and second knuckle of fourth finger
+    return ((fingersDistance / scale) < fingerThreshHold) and ((thumbDistance / scale) < thumbThreshHold)
     
+def next_slide():
+    global holding_index_pinch
+    global last_pinch
+    now = time.monotonic()
+    if not holding_index_pinch:
+        if now - last_pinch > COOLDOWN:
+            keyboard.send("right")
+            print("next slide")
+            last_pinch = now
+    holding_index_pinch = True
+
+def prev_slide():
+    global holding_middle_pinch
+    global last_pinch
+    now = time.monotonic()
+    if not holding_middle_pinch:
+        if now - last_pinch > COOLDOWN:
+            keyboard.send("left")
+            print("prev slide")
+            last_pinch = now
+    holding_middle_pinch = True
+
 # ---------------------------------------------------------------------------
 # Callback
 # ---------------------------------------------------------------------------
 def callback(result, mp_image, timestamp_ms):
     global latest_frame
+    global holding_index_pinch
+    global holding_middle_pinch
+    global index_pinch_time
+    global middle_pinch_time
 
     frame = mp_image.numpy_view().copy()
     h, w, _ = frame.shape
 
     if result.hand_landmarks:
         hand = result.hand_landmarks[0]
-        if is_Pinch(hand):
+
+        if is_Fist(hand):
+            do_slides = False
             calibrate(hand)
+        else:
+            do_slides = True
+
+        # -------- INDEX PINCH --------#
+        if is_Index_Pinch(hand) and do_slides:
+            if index_pinch_time >= 2:
+                next_slide()
+            else:
+                index_pinch_time += 1
+        else:
+            holding_index_pinch = False
+            index_pinch_time = 0
+
+
+        # -------- MIDDLE PINCH --------
+        if is_Middle_Pinch(hand) and do_slides:
+            if middle_pinch_time >= 2:
+                prev_slide()
+            else:
+                middle_pinch_time += 1
+        else:
+            holding_middle_pinch = False
+            middle_pinch_time = 0
         
         draw_anchor_rect(frame, anchor)
         get_cursor_pos(hand, anchor, SCREEN_W, SCREEN_H, SENSITIVITY)
